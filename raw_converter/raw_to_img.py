@@ -38,6 +38,23 @@ bit_depth_maps = {
     "RAW10": 10,
     }
 
+def align_down(size, align):
+    return (size & ~((align)-1))
+
+def align_up(size, align):
+    return align_down(size + align - 1, align)
+
+def remove_padding(data, width, height, bit_width):
+    buff = np.frombuffer(data, np.uint8)
+    real_width = width // 8 * bit_width
+    align_width = align_up(real_width, 32)
+    align_height = align_up(height, 16)
+    
+    buff = buff.reshape(align_height, align_width)
+    buff = buff[:height, :real_width]
+    buff = buff.reshape(height * real_width)
+    return buff
+
 def unpack_mipi_raw10(byte_buf):
     data = np.frombuffer(byte_buf, dtype=np.uint8)
     # 5 bytes contain 4 10-bit pixels (5x8 == 4x10)
@@ -70,6 +87,7 @@ def convert(args):
     cvt_code = bayer_order_maps[args.bayer_order]
     depth = 10
     data = np.fromfile(input_name, np.uint8)
+    data = remove_padding(data, width, height, 10)
     img = unpack_mipi_raw10(data)
     img = (img >> 2).astype(np.uint8)
     img = img.reshape(height, width)
@@ -92,6 +110,9 @@ def parse_cmdline():
                         help="Specified height.")
     parser.add_argument('-b', '--bayer-order', choices=list(bayer_order_maps.keys()), type=str, required=True,
                         help="Set bayer order.")
+    parser.add_argument('--mipi-camera', action='store_true', default=False,
+                        help="remove padding for MIPI_Camera SDK output.")
+
 
     return parser.parse_args()
 
